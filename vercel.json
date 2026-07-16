@@ -1,15 +1,17 @@
 {
   "functions": {
     "api/fir.py": {
-      "maxDuration": 15
+      "maxDuration": 10
     }
   },
-  "headers": [
+  "routes": [
     {
-      "source": "/api/(.*)",
-      "headers": [
-        { "key": "Access-Control-Allow-Origin", "value": "*" }
-      ]
+      "src": "/api/(.*)",
+      "dest": "/api/fir.py"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/fir.py"
     }
   ]
 }
