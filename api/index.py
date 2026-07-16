@@ -10,24 +10,19 @@ app = Flask(__name__)
 CORS(app)
 
 # ============================================
-# CACHE SYSTEM (1 hour cache)
+# CACHE SYSTEM
 # ============================================
 
 cache = {}
 cache_time = {}
 
 def get_cached_or_fetch(cnic):
-    """Cache se data laayein agar available ho"""
-    
     if cnic in cache:
-        # Check if cache is still valid (1 hour)
         if datetime.now() - cache_time[cnic] < timedelta(hours=1):
             return cache[cnic]
-    
     return None
 
 def save_to_cache(cnic, data):
-    """Data ko cache mein save karein"""
     cache[cnic] = data
     cache_time[cnic] = datetime.now()
 
@@ -36,14 +31,12 @@ def save_to_cache(cnic, data):
 # ============================================
 
 def normalize_cnic(cnic):
-    """CNIC ko standard format mein convert karein"""
     digits = re.sub(r'\D', '', cnic)
     if len(digits) == 13:
         return f"{digits[:5]}-{digits[5:12]}-{digits[12]}"
     return cnic
 
 def validate_cnic(cnic):
-    """CNIC valid hai ya nahi check karein"""
     digits = re.sub(r'\D', '', cnic)
     return len(digits) == 13 and digits.isdigit()
 
@@ -52,8 +45,6 @@ def validate_cnic(cnic):
 # ============================================
 
 def get_mock_data(cnic):
-    """Mock data for testing when real API is down"""
-    
     return {
         "CRO": {
             "cro": {
@@ -77,23 +68,13 @@ def get_mock_data(cnic):
                         "fir_offence_date": "2024-01-15",
                         "fir_offecnce": "Theft",
                         "fir_status": "Under Investigation"
-                    },
-                    {
-                        "fir_district": "Lahore",
-                        "fir_ps": "Defence",
-                        "fir_no": "456/2023",
-                        "fir_year": "2023",
-                        "secName": "Section 324 PPC",
-                        "fir_offence_date": "2023-12-20",
-                        "fir_offecnce": "Attempt to Murder",
-                        "fir_status": "Challan Filed"
                     }
                 ]
             }
         },
         "Mulzmaan": [
             {
-                "sus_name": "Test Suspect 1",
+                "sus_name": "Test Suspect",
                 "sus_parent_name": "Father Name",
                 "sus_gender": "Male",
                 "sus_cast": "Awan",
@@ -142,8 +123,6 @@ def get_mock_data(cnic):
 # ============================================
 
 def search_cnic(cnic):
-    """Punjab Police API se data fetch karein with retry"""
-    
     url = "https://fir.punjabpolice.gov.pk/restapi/All_api/checkPersonForHrmis"
     
     headers = {
@@ -162,12 +141,10 @@ def search_cnic(cnic):
         'district_id': ''
     }
     
-    # Retry logic - 3 attempts
     for attempt in range(3):
         try:
             print(f"Attempt {attempt + 1} for CNIC: {cnic}")
             
-            # 30 second timeout
             response = requests.post(
                 url, 
                 data=data, 
@@ -175,7 +152,6 @@ def search_cnic(cnic):
                 timeout=30
             )
             
-            # Check response
             if response.status_code == 200:
                 text = response.text
                 if text.startswith('\ufeff'):
@@ -183,34 +159,20 @@ def search_cnic(cnic):
                 
                 result = json.loads(text)
                 
-                # Check if valid data
                 if result and 'CRO' in result:
                     return result
-                else:
-                    print(f"Attempt {attempt + 1}: No CRO data found")
                     
-            else:
-                print(f"Attempt {attempt + 1}: Status code {response.status_code}")
-                
         except requests.exceptions.Timeout:
             print(f"Attempt {attempt + 1}: Timeout")
-            if attempt < 2:  # Don't wait after last attempt
-                time.sleep(2)  # Wait 2 seconds before retry
-            continue
-            
-        except requests.exceptions.ConnectionError:
-            print(f"Attempt {attempt + 1}: Connection Error")
             if attempt < 2:
-                time.sleep(3)
+                time.sleep(2)
             continue
-            
         except Exception as e:
             print(f"Attempt {attempt + 1}: Error - {str(e)}")
             if attempt < 2:
                 time.sleep(2)
             continue
     
-    # All attempts failed
     return {"error": "API is not responding. Please try again later."}
 
 # ============================================
@@ -218,8 +180,6 @@ def search_cnic(cnic):
 # ============================================
 
 def format_complete_response(data, cnic):
-    """Complete formatted response with all records"""
-    
     if not data or "error" in data:
         return {
             "success": False,
@@ -256,7 +216,6 @@ def format_complete_response(data, cnic):
             'status': info.get('sus_status', 'N/A')
         }
         
-        # Photo
         if 'photo' in info and info['photo']:
             result['records']['photo'] = {
                 'base64': info['photo'],
@@ -295,6 +254,161 @@ def format_complete_response(data, cnic):
         for hotel in data['Hotel_travelEye']['arrHotel']:
             result['records']['hotel_records'].append({
                 'guest_name': hotel.get('guestName', 'N/A'),
+                'father_name': hotel.get('guestFatherName', 'N/A'),
+                'cnic': hotel.get('CNIC', 'N/A'),
+                'check_in': hotel.get('CheckIn', 'N/A'),
+                'check_out': hotel.get('CheckOut', 'N/A'),
+                'hotel_name': hotel.get('HotelName', 'N/A'),
+                'hotel_address': hotel.get('HotelAddress', 'N/A'),
+                'police_station': hotel.get('PoliceStation', 'N/A'),
+                'district': hotel.get('District', 'N/A')
+            })
+    
+    # Travel Records
+    if 'Hotel_travelEye' in data and 'arrTravel' in data['Hotel_travelEye']:
+        for travel in data['Hotel_travelEye']['arrTravel']:
+            result['records']['travel_records'].append({
+                'name': travel.get('Name', 'N/A'),
+                'route_from': travel.get('route_from', 'N/A'),
+                'route_to': travel.get('route_to', 'N/A'),
+                'datetime': travel.get('datetime', 'N/A')
+            })
+    
+    # Jail Record
+    if 'Jail' in data and 'data' in data['Jail']:
+        jail = data['Jail']['data']
+        result['records']['jail_record'] = {
+            'name': jail.get('No_name', 'N/A'),
+            'cro_no': jail.get('No_cro_no', 'N/A'),
+            'district': jail.get('No_district', 'N/A'),
+            'cro_district': jail.get('No_cro_district', 'N/A'),
+            'status': jail.get('No_status', 'N/A')
+        }
+    
+    # Summary
+    result['records']['summary'] = {
+        'total_fir': len(result['records']['fir_records']),
+        'total_suspects': len(result['records']['suspects']),
+        'total_hotels': len(result['records']['hotel_records']),
+        'total_travels': len(result['records']['travel_records']),
+        'has_photo': result['records']['photo'] is not None,
+        'data_source': 'cache' if cnic in cache else 'live'
+    }
+    
+    return result
+
+# ============================================
+# MAIN API ENDPOINT
+# ============================================
+
+@app.route('/api/fir', methods=['GET', 'POST'])
+def get_fir():
+    if request.method == 'GET':
+        cnic = request.args.get('cnic')
+    else:
+        cnic = request.json.get('cnic') if request.is_json else request.form.get('cnic')
+    
+    if not cnic:
+        return jsonify({
+            "success": False,
+            "error": "CNIC required",
+            "format": "GET: /api/fir?cnic=12345-6789012-3"
+        }), 400
+    
+    normalized = normalize_cnic(cnic)
+    
+    if not validate_cnic(normalized):
+        return jsonify({
+            "success": False,
+            "error": "Invalid CNIC format",
+            "format": "Use: 12345-6789012-3 or 1234567890123"
+        }), 400
+    
+    # Check cache
+    cached_data = get_cached_or_fetch(normalized)
+    if cached_data:
+        return jsonify({
+            "success": True,
+            "cnic": normalized,
+            "data": cached_data,
+            "from_cache": True
+        })
+    
+    # Try real API
+    print(f"Searching for CNIC: {normalized}")
+    result = search_cnic(normalized)
+    
+    if "error" in result:
+        print("Using mock data (real API failed)")
+        mock_data = get_mock_data(normalized)
+        save_to_cache(normalized, mock_data)
+        
+        return jsonify({
+            "success": True,
+            "cnic": normalized,
+            "data": mock_data,
+            "from_cache": False,
+            "source": "mock",
+            "message": "Real API is not responding. Showing test data."
+        })
+    
+    formatted_data = format_complete_response(result, normalized)
+    save_to_cache(normalized, formatted_data)
+    
+    return jsonify(formatted_data)
+
+# ============================================
+# ADDITIONAL ENDPOINTS
+# ============================================
+
+@app.route('/api/health', methods=['GET'])
+def health_check():
+    return jsonify({
+        "status": "healthy",
+        "version": "2.0.0",
+        "cache_size": len(cache),
+        "features": ["all_records", "photos", "hotel", "travel", "jail", "fir"]
+    })
+
+@app.route('/')
+def home():
+    return """
+    <h1>🔍 FIR Tracking API v2.0</h1>
+    <p>Complete CNIC tracking with all records + photos</p>
+    
+    <h3>📌 Endpoints:</h3>
+    <ul>
+        <li><code>GET /api/fir?cnic=12345-6789012-3</code> - Complete record</li>
+        <li><code>GET /api/health</code> - Health check</li>
+    </ul>
+    
+    <h3>📊 Response Includes:</h3>
+    <ul>
+        <li>✅ Basic Info (Name, Father, Address, Phone)</li>
+        <li>✅ Photo (Base64 format)</li>
+        <li>✅ FIR Records (All)</li>
+        <li>✅ Suspects (All)</li>
+        <li>✅ Hotel Records (All)</li>
+        <li>✅ Travel Records (All)</li>
+        <li>✅ Jail Record</li>
+        <li>✅ Summary</li>
+    </ul>
+    
+    <h3>📱 Try it:</h3>
+    <pre>
+    /api/fir?cnic=61101-7980174-9
+    </pre>
+    """
+
+# ============================================
+# FOR VERCEL
+# ============================================
+
+# Vercel needs this
+app = app
+
+if __name__ == '__main__':
+    app.run(debug=True, port=5000)guest_name': hotel.get('guestName', 'N/A'),
                 'father_name': hotel.get('guestFatherName', 'N/A'),
                 'cnic': hotel.get('CNIC', 'N/A'),
                 'check_in': hotel.get('CheckIn', 'N/A'),
