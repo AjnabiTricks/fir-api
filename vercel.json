@@ -3,15 +3,5 @@
     "api/fir.py": {
       "maxDuration": 30
     }
-  },
-  "routes": [
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/fir.py"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/api/fir.py"
-    }
-  ]
+  }
 }
