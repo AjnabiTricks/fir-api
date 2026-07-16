@@ -1,6 +1,6 @@
 {
   "functions": {
-    "api/fir.py": {
+    "api/index.py": {
       "maxDuration": 30
     }
   }
